@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Салықтан жалтаруды анықтау - СалықЖИ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Use Tesseract.js 2.x build to ensure global Tesseract object is defined -->
+    <script src="https://unpkg.com/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: #0B0F17;
+            color: #E5E7EB;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Упрощённый строгий фон */
+        body::before,
+        body::after {
+            display: none;
+        }
+
+        main {
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Сдержанный стиль без яркого неона */
+        .neon-glow,
+        .neon-glow-lg,
+        .neon-glow-red {
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+        }
+
+        .neon-text-green {
+            color: #38bdf8;
+        }
+
+        .neon-text-red {
+            color: #fb923c;
+        }
+
+        /* Простой акцентный текст */
+        .gradient-neon {
+            color: #f1f5f9;
+            background: none;
+            text-shadow: none;
+        }
+
+        .gradient-bg {
+            background: rgba(100, 116, 139, 0.08);
+        }
+
+        /* Кнопка */
+        .btn-neon {
+            background: rgba(34, 197, 94, 0.18);
+            color: #f1f5f9;
+            border: 1px solid rgba(34, 197, 94, 0.55);
+            padding: 12px 32px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+            position: relative;
+            overflow: hidden;
+            letter-spacing: 0.2px;
+        }
+
+        .btn-neon:hover {
+            transform: translateY(-2px);
+            background: rgba(34, 197, 94, 0.26);
+            border-color: rgba(34, 197, 94, 0.8);
+        }
+
+        .btn-neon:active {
+            transform: translateY(0);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-neon-large {
+            padding: 14px 40px;
+            font-size: 17px;
+        }
+
+        .btn-neon-large:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Логотип */
+        .logo-img {
+            height: 44px;
+            transition: transform 0.18s ease;
+        }
+        .logo-img:hover {
+            transform: scale(1.08);
+        }
+
+        /* Инпут */
+        .input-neon {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(96, 165, 250, 0.4);
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #E5E7EB;
+            transition: all 0.2s ease;
+        }
+
+        .input-neon:focus {
+            outline: none;
+            border-color: rgba(96, 165, 250, 0.8);
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .input-neon::placeholder {
+            color: rgba(229, 231, 235, 0.5);
+        }
+
+        /* Модальное окно */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center; /* орталау */
+            justify-content: center;
+            padding: 16px;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, rgba(10, 10, 10, 0.98) 0%, rgba(15, 15, 30, 0.98) 100%);
+            border: 2px solid #00FF9F;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 550px;
+            width: 90%;
+            max-height: 80vh;
+            overflow: auto;
+            box-shadow: 0 0 40px #00FF9F, 0 0 80px rgba(0, 255, 159, 0.3), inset 0 0 40px rgba(0, 255, 159, 0.05);
+            animation: slideUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+        }
+
+        .modal-content::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(0, 255, 159, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-content.danger {
+            border-color: #FF006E;
+            box-shadow: 0 0 40px #FF006E, 0 0 80px rgba(255, 0, 110, 0.3), inset 0 0 40px rgba(255, 0, 110, 0.05);
+        }
+
+        /* Загрузка */
+        .spinner {
+            border: 3px solid rgba(0, 255, 159, 0.2);
+            border-top: 3px solid #00FF9F;
+            border-right: 3px solid #39FF14;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            box-shadow: 0 0 15px rgba(0, 255, 159, 0.5);
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Результат */
+        .result-item {
+            background: linear-gradient(135deg, rgba(0, 255, 159, 0.08) 0%, rgba(57, 255, 20, 0.04) 100%);
+            border-left: 4px solid #00FF9F;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 16px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(0, 255, 159, 0.2);
+        }
+
+        .result-item:hover {
+            border-color: #00FF9F;
+            box-shadow: inset 0 0 15px rgba(0, 255, 159, 0.1);
+            transform: translateX(4px);
+        }
+
+        .result-item-danger {
+            background: linear-gradient(135deg, rgba(255, 0, 110, 0.08) 0%, rgba(255, 0, 110, 0.04) 100%);
+            border-left-color: #FF006E;
+            border-color: rgba(255, 0, 110, 0.2);
+        }
+
+        .result-item-danger:hover {
+            border-color: #FF006E;
+            box-shadow: inset 0 0 15px rgba(255, 0, 110, 0.1);
+        }
+
+        /* Анимация появления */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
+
+        /* Пульс */
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 20px #00FF9F, 0 0 40px #00FF9F;
+            }
+            50% {
+                box-shadow: 0 0 30px #00FF9F, 0 0 60px #00FF9F, 0 0 90px rgba(0, 255, 159, 0.4);
+            }
+        }
+
+        .pulse-neon {
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        /* Информационная карточка */
+        .info-card {
+            background: linear-gradient(135deg, rgba(0, 255, 159, 0.08) 0%, rgba(57, 255, 20, 0.04) 100%);
+            border: 1px solid rgba(0, 255, 159, 0.3);
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.4s ease;
+        }
+
+        .info-card:hover {
+            border-color: #00FF9F;
+            box-shadow: 0 0 20px rgba(0, 255, 159, 0.2), inset 0 0 20px rgba(0, 255, 159, 0.05);
+            transform: translateY(-4px);
+        }
+
+        /* Статус файла */
+        .file-status-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #00FF9F 0%, #39FF14 100%);
+            color: #0A0A0A;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            margin-top: 8px;
+            box-shadow: 0 0 15px #00FF9F;
+            animation: fadeInUp 0.5s ease;
+        }
+
+        /* Адаптив */
+        @media (max-width: 768px) {
+            .modal-content {
+                padding: 30px 20px;
+                max-width: 95%;
+            }
+
+            .btn-neon-large {
+                padding: 14px 28px;
+                font-size: 16px;
+            }
+
+            body::before {
+                width: 250px;
+                height: 250px;
+            }
+
+            body::after {
+                width: 200px;
+                height: 200px;
+            }
+        }
+
+        /* Скрытие input file */
+        #pdfInput {
+            display: none;
+        }
+
+        /* Футер */
+        .footer-text {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(0, 255, 159, 0.2);
+            transition: all 0.3s ease;
+            letter-spacing: 0.3px;
+        }
+
+        .footer-text:hover {
+            color: rgba(0, 255, 159, 0.7);
+        }
+
+        /* Заголовок */
+        h1, h2, h3 {
+            letter-spacing: -0.5px;
+        }
+
+        /* Текст описания */
+        .description-text {
+            line-height: 1.7;
+            letter-spacing: 0.3px;
+        }
+
+        /* Плавное появление при загрузке */
+        .hero-content {
+            animation: fadeInUp 0.8s ease;
+        }
+
+
+        /* Логотип */
+        .logo-container {
+            cursor: pointer;
+            transition: transform 0.25s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-container:hover {
+            transform: scale(1.14);
+        }
+
+        .logo-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transform: scale(1.5);
+            transition: transform 0.25s ease;
+        }
+
+        .logo-container:hover .logo-img {
+            transform: scale(1.7);
+        }
+    </style>
+</head>
+<body>
+    <!-- Шапка -->
+    <header class="border-b border-opacity-30 border-blue-500 py-4 px-4 sticky top-0 z-50 backdrop-filter backdrop-blur-xl bg-opacity-70 bg-black shadow-2xl">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="logo-container w-20 h-20 md:w-24 md:h-24">
+                    <img src="logo.svg" alt="СалықЖИ" class="logo-img" />
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Основной контент -->
+    <main class="min-h-screen flex flex-col items-center justify-center px-4 py-16">
+        <div class="max-w-2xl w-full hero-content">
+            <!-- Карточка с контентом -->
+            <div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 rounded-2xl p-8 md:p-16 border border-blue-500 border-opacity-40 neon-glow relative overflow-hidden">
+                <!-- Заголовок -->
+                <h2 class="text-4xl md:text-5xl font-bold text-center mb-4 gradient-neon relative z-10">
+                    ЖИ арқылы салық деректерін анализдеу
+                </h2>
+
+                <!-- Подзаголовок -->
+                <p class="text-center text-gray-300 text-lg md:text-xl mb-12 leading-relaxed description-text relative z-10">
+                    Банк транзакцияларын PDF форматында жүктеңіз және ЖИ көмегімен 30 секундта тексеріңіз
+                </p>
+
+                <!-- Статус файла -->
+                <div id="fileStatus" class="text-center mb-10 relative z-10">
+                    <p class="text-gray-400 text-sm">📁 Файл таңдалмаған</p>
+                </div>
+
+                <!-- Файл жүктеу батырмасы -->
+                <div class="flex flex-col gap-4 mb-4 relative z-10">
+                    <button id="uploadBtn" class="btn-neon btn-neon-large w-full group">
+                        <span class="inline-block transition-transform group-hover:scale-110">📄</span> Файл таңдаңыз (PDF, JSON, JPG)
+                    </button>
+                    <input type="file" id="pdfInput" accept=".pdf,.json,.jpg,.jpeg,.png" />
+
+                    <!-- ЖИ талдау батырмасы -->
+                    <button id="runAnalysisBtn" class="btn-neon btn-neon-large w-full opacity-50 cursor-not-allowed" disabled>
+                        🧠 ЖИ талдау
+                    </button>
+                </div>
+
+                <!-- JSON массив -->
+                <div class="bg-gray-900 bg-opacity-30 border border-blue-500 border-opacity-40 rounded-xl p-4 text-left">
+                    <div class="text-sm font-semibold text-blue-200 mb-2">JSON массив</div>
+                    <textarea id="jsonInput" rows="6" placeholder='[ {"amount": 5000, "description": "salary"}, ... ]' class="w-full bg-black bg-opacity-20 border border-gray-700 rounded-lg p-3 text-sm text-gray-100 focus:outline-none focus:border-blue-400" ></textarea>
+                    <p class="text-xs text-gray-500 mt-2">JSON деректерін осында енгізіп, ЖИ талдау батырмасын басыңыз.</p>
+                </div>
+            </div>
+        </div>
+
+    <div id="modalOverlay" class="modal-overlay">
+        <div id="modalContent" class="modal-content">
+            <h2 class="text-3xl md:text-4xl font-bold mb-8 text-center relative z-10">Талдау нәтижесі</h2>
+
+            <!-- Загрузка -->
+            <div id="loadingState" class="text-center">
+                <div class="flex justify-center mb-6">
+                    <div class="spinner"></div>
+                </div>
+                <p class="text-gray-300 text-lg font-medium">Деректер сканерленуде...</p>
+                <p class="text-gray-500 text-sm mt-2">Орта есеп бойынша 5-10 секунд ішінде аяқталады</p>
+            </div>
+
+            <!-- Результат -->
+            <div id="resultState" style="display: none;" class="relative z-10">
+                <div id="resultStatus" class="text-center mb-8">
+                    <h3 id="resultTitle" class="text-3xl font-bold mb-3"></h3>
+                    <p id="resultDescription" class="text-gray-300 text-sm leading-relaxed"></p>
+                    <div id="resultStats" class="text-gray-300 text-sm mt-4"></div>
+                </div>
+
+                <!-- Рекомендация -->
+                <div id="recommendation" class="bg-gradient-to-r from-blue-500 to-blue-600 bg-opacity-15 border-l-4 border-blue-500 p-5 rounded-lg mb-8 fade-in" style="display: none; animation-delay: 0.5s;">
+                    <p class="text-sm text-blue-300 flex items-start gap-3">
+                        <span class="mt-1 text-lg">💡</span>
+                        <span id="recommendationText"></span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Кнопка закрытия -->
+            <button id="closeModalBtn" class="btn-neon w-full relative z-10">
+                <span class="inline-block transition-transform hover:rotate-180">🔄</span> Жаңа файл жүктеу
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Установка pdf.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        let selectedFile = null;
+        let currentFileType = null;
+        let trainedModel = null; // If we load a labeled CSV (creditcard), we'll keep a simple model here
+
+        const fileStatusEl = document.getElementById('fileStatus');
+        const pdfInput = document.getElementById('pdfInput');
+        const jsonInput = document.getElementById('jsonInput');
+        const runAnalysisBtn = document.getElementById('runAnalysisBtn');
+
+        function setFileStatus(name, sizeMb) {
+            fileStatusEl.innerHTML = `
+                <p class="text-blue-400 font-bold mb-2">✅ Файл таңдалды!</p>
+                <div class="file-status-badge">
+                    📄 ${name} (${sizeMb} MB)
+                </div>
+            `;
+            updateAnalyzeButtonState();
+        }
+
+        function clearFileStatus() {
+            fileStatusEl.innerHTML = '<p class="text-gray-400 text-sm">📁 Файл таңдалмаған</p>';
+            selectedFile = null;
+            updateAnalyzeButtonState();
+        }
+
+        function updateAnalyzeButtonState() {
+            const hasJson = jsonInput && jsonInput.value.trim().length > 0;
+            const hasFile = Boolean(selectedFile);
+
+            if (hasJson || hasFile) {
+                runAnalysisBtn.disabled = false;
+                runAnalysisBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                runAnalysisBtn.disabled = true;
+                runAnalysisBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function handleFileSelection(file) {
+            if (!file) return;
+            selectedFile = file;
+            currentFileType = file.type || '';
+            trainedModel = null; // Сброс предыдущего обученного состояния
+
+            const fileName = file.name;
+            const fileSize = (file.size / 1024 / 1024).toFixed(2);
+            setFileStatus(fileName, fileSize);
+        }
+
+        // Кнопка загрузки файла
+        document.getElementById('uploadBtn').addEventListener('click', () => {
+            pdfInput.click();
+        });
+
+        // Обработка выбора файла
+        pdfInput.addEventListener('change', (e) => {
+            handleFileSelection(e.target.files[0]);
+        });
+
+        // JSON мәтіні өзгергенде талдау батырмасын қосу/өшіру
+        jsonInput.addEventListener('input', () => {
+            updateAnalyzeButtonState();
+        });
+
+        // Кнопка для запуска анализа
+        runAnalysisBtn.addEventListener('click', () => {
+            analyzeFile();
+        });
+
+        // Анализ файла
+        async function analyzeFile() {
+            const jsonText = jsonInput.value.trim();
+
+            if (!selectedFile && !jsonText) {
+                alert('Файл немесе JSON енгізіңіз.');
+                return;
+            }
+
+            document.getElementById('modalOverlay').classList.add('active');
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('resultState').style.display = 'none';
+
+            try {
+                let analysis;
+
+                if (jsonText) {
+                    try {
+                        const parsed = JSON.parse(jsonText);
+                        analysis = analyzeJson(parsed);
+                    } catch {
+                        alert('JSON мәтінінде қате бар. Қайта тексеріңіз.');
+                        document.getElementById('modalOverlay').classList.remove('active');
+                        return;
+                    }
+                } else if (selectedFile) {
+                    if (currentFileType.includes('json') || selectedFile.name.toLowerCase().endsWith('.json')) {
+                        const text = await selectedFile.text();
+                        let data;
+                        try {
+                            data = JSON.parse(text);
+                        } catch {
+                            analysis = { noData: true };
+                        }
+                        if (!analysis) analysis = analyzeJson(data);
+                    } else if (currentFileType.includes('officedocument') || selectedFile.name.toLowerCase().endsWith('.docx')) {
+                        const arrayBuffer = await selectedFile.arrayBuffer();
+                        const text = await extractDocxText(arrayBuffer);
+                        analysis = analyzeTransactions(text);
+                    } else if (currentFileType.includes('pdf') || selectedFile.name.toLowerCase().endsWith('.pdf')) {
+                        const arrayBuffer = await selectedFile.arrayBuffer();
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+                        let fullText = '';
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const textContent = await page.getTextContent();
+                            fullText += textContent.items.map(item => item.str).join(' ') + ' ';
+                        }
+
+                        analysis = analyzeTransactions(fullText);
+                    } else if (currentFileType.startsWith('image') || /\.(png|jpe?g|bmp|gif)$/i.test(selectedFile.name)) {
+                        const { data: { text } } = await Tesseract.recognize(selectedFile, 'eng+rus', { logger: () => {} });
+                        analysis = analyzeTransactions(text);
+                    } else {
+                        const text = await selectedFile.text();
+                        analysis = analyzeTransactions(text);
+                    }
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 500));
+                displayResults(analysis);
+            } catch (error) {
+                console.error('Файл өңдеу кезінде қате:', error);
+                alert('Файлды өңдеу кезінде қате орын алды. Файлды тексеріңіз.');
+                document.getElementById('modalOverlay').classList.remove('active');
+            }
+        }
+
+        // Функция анализа транзакций
+        function buildAnalysisResult({ totalTransactions, totalAmount, expenseAmount, incomeAmount, suspiciousKeywords, trainingInfo, initialRiskReasons = [] }) {
+            const ratio = incomeAmount > 0 ? expenseAmount / incomeAmount : null;
+            const riskReasons = Array.isArray(initialRiskReasons) ? [...initialRiskReasons] : [];
+
+            if (suspiciousKeywords && suspiciousKeywords.size > 0 && totalAmount > 0) {
+                riskReasons.push('күдікті сөздер');
+            }
+
+            if (incomeAmount === 0 && expenseAmount > 0) {
+                riskReasons.push('кіріс анықталмаған, шығын көп');
+            }
+
+            if (ratio !== null && ratio > 1.3 && totalAmount > 10000) {
+                riskReasons.push('шығын/кіріс қатынасы жоғары');
+            }
+
+            return {
+                noData: false,
+                hasRisk: riskReasons.length > 0,
+                riskReasons,
+                suspiciousKeywords: suspiciousKeywords ? Array.from(suspiciousKeywords).slice(0, 7) : [],
+                totalTransactions,
+                totalAmount: Number(totalAmount.toFixed(2)),
+                expenseAmount: Number(expenseAmount.toFixed(2)),
+                incomeAmount: Number(incomeAmount.toFixed(2)),
+                ratio: ratio !== null ? Number(ratio.toFixed(2)) : null,
+                trainingInfo: trainingInfo || null,
+            };
+        }
+
+        async function extractDocxText(arrayBuffer) {
+            try {
+                const zip = await JSZip.loadAsync(arrayBuffer);
+                const doc = await zip.file('word/document.xml')?.async('text');
+                if (!doc) return '';
+                const matches = Array.from(doc.matchAll(/<w:t[^>]*>([^<]+)</g));
+                return matches.map(m => m[1]).join(' ');
+            } catch {
+                return '';
+            }
+        }
+
+        function analyzeTransactions(text) {
+            const normalized = String(text || '')
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n')
+                // Выровняем пробелы, но сохраним переносы строк, чтобы числа на разных строках не сливались
+                .replace(/[ \t\u00A0\u202F]+/g, ' ')
+                .trim()
+                .toLowerCase();
+            if (!normalized) return { noData: true };
+
+            // CSV/TSV-like таблица: используем колонку "Amount" (или похожую) вместо разбора всех чисел.
+            const csvAnalysis = tryParseCsvAmounts(normalized);
+            if (csvAnalysis) return csvAnalysis;
+
+            // + және - арқылы кіріс/шығынды ажырату үшін белгілеуді қолдаймыз
+            const moneyRegex = /[+\-−]?[ \u00A0\u202F]*(?:₸|тенге|тг\b|kzt)?[ \u00A0\u202F]*\d(?:[ \u00A0\u202F]\d{3})*(?:[.,]\d+)?/g;
+            const matches = Array.from(normalized.matchAll(moneyRegex)).map(m => m[0]);
+            const uniqueMatches = Array.from(new Set(matches));
+
+            let totalTransactions = 0;
+            let totalAmount = 0;
+            let expenseAmount = 0;
+            let incomeAmount = 0;
+            const suspiciousKeywords = new Set();
+            const parsedValues = [];
+
+            const expenseContextRegex = /шығын|аударым|төлем|қарыз|шықты|шығар(ы)л|withdrawal|cash|сатып|чек/i;
+            const incomeContextRegex = /кіріс|айлық|жалақы|табыс|депозит|income|salary|deposit|түсім/i;
+            const riskKeywordRegex = /салықтан|жалтар[ау]|жасыру|жасырын|офшор|қаражат|негізсіз|комиссия|қолма-қол|hidden|offshore|cash|скрыт|жалған|ферат|фальсиф|құжатсыз|кешірім|сатып|сату|аударым/i;
+
+            for (const raw of uniqueMatches) {
+                const value = parseCurrency(raw);
+                if (Number.isNaN(value) || value === 0) continue;
+
+                const idx = normalized.indexOf(raw);
+                const before = normalized.slice(Math.max(0, idx - 20), idx).trim();
+
+                // Баланс колонки: 'Ввод' / 'Вывод' сөздерінен кейінгі сан (баланс) — оны елемейміз.
+                if (/\b(ввод|вывод)\b/i.test(before)) {
+                    continue;
+                }
+
+                // Дата форматтар (05.01.2026) сияқты мәндерді елемейміз
+                if (/^\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4}$/.test(raw)) {
+                    continue;
+                }
+
+                const absValue = Math.abs(value);
+                const hasSign = /[+\-−]/.test(raw);
+                const isNegative = /[-−]/.test(raw);
+                const isPositive = /\+/.test(raw);
+                const hasCurrencyMarker = /₸|тенге|тг\b|kzt/i.test(raw);
+
+                const windowStart = Math.max(0, idx - 80);
+                const windowEnd = Math.min(normalized.length, idx + raw.length + 80);
+                const context = normalized.slice(windowStart, windowEnd);
+
+                const contextHasMoneyWord = /\b(?:тг|тенге|сом(?:а|асы)?|теңге|төлем|аударым|қарыз|шот|айыппұл|валюта)\b/i.test(context);
+                const hasGroupingSeparator = /[\s,\.\u00A0\u202F]/.test(raw);
+
+                // Егер бұл сан “кәрішті болмаса” және контексттен ақшаға қатысы анықталмаса, өткізіп жібереміз
+                if (!hasCurrencyMarker && !hasGroupingSeparator && !contextHasMoneyWord) {
+                    continue;
+                }
+
+                // Егер ешқандай валюта белгісі жоқ және өте үлкен сан (триллион) болса, күмәнді ретінде өткізіп жібереміз
+                if (!hasCurrencyMarker && !contextHasMoneyWord && absValue > 1e11) {
+                    continue;
+                }
+
+                parsedValues.push(absValue);
+                totalTransactions += 1;
+                totalAmount += absValue;
+
+                // Егер + немесе - белгісі берілген болса, сол арқылы кіріс/шығынды анықтаймыз
+                if (hasSign) {
+                    if (isNegative) {
+                        expenseAmount += absValue;
+                    } else if (isPositive) {
+                        incomeAmount += absValue;
+                    }
+                }
+
+                if (riskKeywordRegex.test(context)) {
+                    suspiciousKeywords.add(context.match(riskKeywordRegex)[0]);
+                }
+
+                // Егер +/− белгісі жоқ болса, онда модель немесе контекст арқылы анықтауды жалғастырамыз
+                if (!hasSign) {
+                    if (trainedModel) {
+                        if (absValue > trainedModel.threshold) {
+                            expenseAmount += absValue;
+                        } else {
+                            incomeAmount += absValue;
+                        }
+                    } else {
+                        if (expenseContextRegex.test(context)) {
+                            expenseAmount += absValue;
+                        }
+                        if (incomeContextRegex.test(context)) {
+                            incomeAmount += absValue;
+                        }
+                    }
+                }
+            }
+
+            // Если ранее уже обучались на CSV (creditcard), используем порог для поиска подозрительных сумм
+            const initialRiskReasons = [];
+            if (trainedModel && parsedValues.length) {
+                const highCount = parsedValues.filter(v => v > trainedModel.threshold).length;
+                if (highCount > 0) {
+                    suspiciousKeywords.add(`ұзын сома (> ${trainedModel.threshold.toFixed(2)})`);
+                    initialRiskReasons.push(`порогтан жоғары ${highCount} транзакция табылды`);
+                }
+            }
+
+            // Если изначально не удалось найти числа (возможно, формат другой), пробуем несколько более мягких проходов.
+            if (totalTransactions === 0) {
+                let best = null;
+                let bestScore = 0;
+
+                for (let pass = 0; pass < 7; pass++) {
+                    const res = runAnalysisPass(normalized, pass);
+                    const score = res.totalTransactions * 1000 + res.totalAmount;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = res;
+                    }
+                }
+
+                if (best && best.totalTransactions > 0) {
+                    totalTransactions = best.totalTransactions;
+                    totalAmount = best.totalAmount;
+                    expenseAmount = best.expenseAmount;
+                    incomeAmount = best.incomeAmount;
+                    for (const kw of best.suspiciousKeywords) suspiciousKeywords.add(kw);
+                }
+            }
+
+            // Если не получилось понять, что это — кіріс немесе шығын, считаем всё как шығын
+            if (expenseAmount === 0 && incomeAmount === 0) {
+                expenseAmount = totalAmount;
+            }
+
+            return buildAnalysisResult({
+                totalTransactions,
+                totalAmount,
+                expenseAmount,
+                incomeAmount,
+                suspiciousKeywords,
+                initialRiskReasons,
+            });
+        }
+
+        function runAnalysisPass(normalized, pass) {
+            // Разная строгость поиска чисел и контекста по каждому проходу
+            const currencyPatterns = [
+                /₸\s*(\d[\d\s,.]*)/g,
+                /(\d[\d\s,.]*)\s*₸/g,
+                /(\d[\d\s,.]*)\s*(?:теңге|тг\b|kzt)/g,
+                /(\d[\d\s,.]{3,})/g,
+            ];
+
+            const suspiciousContextRegex = /салықтан|жалтар[ау]|жасыру|офшор|қаражат|негізсіз|комиссия|қолма-қол|hidden|offshore|cash|скрыт|жалған|ферат|фальсиф/i;
+            const expenseContextRegex = /withdrawal|cash|шығын|аударым|сатып|төлем|қарыз|қалған|шегеру|tөлем|штраф|түсіп|шықты/i;
+            const incomeContextRegex = /income|salary|deposit|кіріс|айлық|жалақы|табыс|түсім|ықпал|комиссия/i;
+
+            // На каждом проходе используем чуть другую стратегию выбора шаблона
+            const pattern = currencyPatterns[pass % currencyPatterns.length];
+
+            let match;
+            let totalTransactions = 0;
+            let totalAmount = 0;
+            let expenseAmount = 0;
+            let incomeAmount = 0;
+            let suspiciousCount = 0;
+            const suspiciousKeywords = new Set();
+
+            while ((match = pattern.exec(normalized)) !== null) {
+                const raw = match[1] || match[0];
+                const value = parseCurrency(raw);
+                if (Number.isNaN(value) || value <= 0) continue;
+
+                totalTransactions += 1;
+                totalAmount += value;
+
+                const windowStart = Math.max(0, match.index - 60);
+                const windowEnd = Math.min(normalized.length, match.index + (match[0]?.length || 0) + 60);
+                const context = normalized.slice(windowStart, windowEnd);
+
+                if (suspiciousContextRegex.test(context)) {
+                    suspiciousCount += 1;
+                    suspiciousKeywords.add(context.match(suspiciousContextRegex)[0]);
+                }
+                if (expenseContextRegex.test(context)) {
+                    expenseAmount += value;
+                }
+                if (incomeContextRegex.test(context)) {
+                    incomeAmount += value;
+                }
+            }
+
+            // Дополнительная проверка: если не нашли ничего, пробуем любые числа (для случая, когда нет валюты)
+            if (totalTransactions === 0 && pass === 6) {
+                const fallback = /\b(\d[\d\s,.]{2,})\b/g;
+                while ((match = fallback.exec(normalized)) !== null) {
+                    const val = parseCurrency(match[1]);
+                    if (Number.isNaN(val) || val <= 0) continue;
+                    totalTransactions += 1;
+                    totalAmount += val;
+                }
+            }
+
+            const ratio = incomeAmount > 0 ? expenseAmount / incomeAmount : null;
+            const highExpenseRatio = ratio !== null ? ratio > 1.3 : expenseAmount > 150000;
+            const riskBySuspicion = suspiciousCount >= 2;
+
+            return {
+                hasRisk: highExpenseRatio || riskBySuspicion,
+                suspiciousKeywords: Array.from(suspiciousKeywords),
+                totalTransactions,
+                totalAmount: Number(totalAmount.toFixed(2)),
+                expenseAmount: Number(expenseAmount.toFixed(2)),
+                incomeAmount: Number(incomeAmount.toFixed(2)),
+            };
+        }
+
+        function parseCurrency(raw) {
+            const str = String(raw || '').trim();
+            if (!str) return NaN;
+
+            // Сохраняем знак отдельно (плюс/минус), чтобы не терять его при очистке
+            const signMatch = str.match(/^[+\-−]/);
+            const sign = signMatch ? signMatch[0] : '';
+            let body = str.replace(/^[+\-−]\s*/, '');
+
+            // Удаляем всё, кроме цифр и разделителей (точка, запятая)
+            body = body.replace(/[^\d.,]/g, '');
+            if (!body) return NaN;
+
+            // Если есть и точка, и запятая — считаем, что последний разделитель является десятичным
+            const lastComma = body.lastIndexOf(',');
+            const lastDot = body.lastIndexOf('.');
+            let decimalSep = null;
+            if (lastComma >= 0 || lastDot >= 0) {
+                decimalSep = lastComma > lastDot ? ',' : '.';
+            }
+
+            let normalized;
+            if (decimalSep) {
+                const parts = body.split(decimalSep);
+                const frac = parts.pop();
+                const intPart = parts.join('');
+
+                // Егер үтірден кейін тек нөлдар болса, бүтін сан ретінде қабылдаймыз
+                if (/^0+$/.test(frac)) {
+                    normalized = intPart.replace(/[.,]/g, '');
+                }
+                // Егер соткада 3 цифр болса, бұл көбіне мыңдық бөлгіш жайлы
+                else if (frac.length === 3) {
+                    normalized = body.replace(/[.,]/g, '');
+                } else {
+                    normalized = `${intPart.replace(/[.,]/g, '')}.${frac}`;
+                }
+            } else {
+                normalized = body.replace(/[.,]/g, '');
+            }
+
+            const result = parseFloat(normalized);
+            if (Number.isNaN(result)) return NaN;
+            const rounded = Number(result.toFixed(2));
+            return sign === '-' || sign === '−' ? -rounded : rounded;
+        }
+
+        function tryParseCsvAmounts(text) {
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length < 2) return null;
+
+            const delimiter = lines[0].includes(',') ? ',' : lines[0].includes(';') ? ';' : lines[0].includes('\t') ? '\t' : null;
+            if (!delimiter) return null;
+
+            const header = lines[0].split(delimiter).map(h => h.replace(/^['"]|['"]$/g, '').trim().toLowerCase());
+            const amountIdx = header.findIndex(h => /^(amount|sum|total|сумма|сом[аи]?|мөлшер|құны)$/i.test(h));
+            if (amountIdx === -1) return null;
+
+            const classIdx = header.findIndex(h => /^class$/i.test(h));
+            const hasClassColumn = classIdx !== -1;
+            const classStats = { 0: { count: 0, sum: 0 }, 1: { count: 0, sum: 0 } };
+
+            let totalTransactions = 0;
+            let totalAmount = 0;
+            let expenseAmount = 0;
+            let incomeAmount = 0;
+
+            const maxTrainingRows = 10000;
+            for (let i = 1; i < lines.length && i <= maxTrainingRows; i++) {
+                const cols = lines[i].split(delimiter);
+                if (cols.length <= amountIdx) continue;
+
+                const raw = cols[amountIdx].trim().replace(/^['"]|['"]$/g, '');
+                const value = parseCurrency(raw);
+                if (Number.isNaN(value) || value === 0) continue;
+
+                const absValue = Math.abs(value);
+                // Ограничиваем экстраординарно большие величины (артефакты парсинга, не реальные транзакции)
+                if (absValue > 1e11) continue;
+
+                let classLabel = null;
+                if (hasClassColumn && cols.length > classIdx) {
+                    const rawClass = cols[classIdx].trim();
+                    const n = Number(rawClass);
+                    if (!Number.isNaN(n)) {
+                        classLabel = n === 1 ? 1 : 0;
+                    }
+                }
+
+                if (classLabel !== null) {
+                    classStats[classLabel].count += 1;
+                    classStats[classLabel].sum += absValue;
+
+                    // Use label column for income/expense separation
+                    if (classLabel === 1) {
+                        expenseAmount += absValue;
+                    } else {
+                        incomeAmount += absValue;
+                    }
+                } else {
+                    if (value < 0) {
+                        expenseAmount += absValue;
+                    } else if (value > 0) {
+                        incomeAmount += absValue;
+                    }
+                }
+
+                parsedValues.push(absValue);
+                totalTransactions += 1;
+                totalAmount += absValue;
+            }
+
+            if (totalTransactions === 0) return null;
+            if (expenseAmount === 0 && incomeAmount === 0) incomeAmount = totalAmount;
+
+            let trainingInfo = null;
+            if (hasClassColumn) {
+                const mean0 = classStats[0].count ? classStats[0].sum / classStats[0].count : 0;
+                const mean1 = classStats[1].count ? classStats[1].sum / classStats[1].count : 0;
+                const threshold = (mean0 + mean1) / 2;
+
+                trainedModel = {
+                    meanByClass: { 0: mean0, 1: mean1 },
+                    countByClass: { 0: classStats[0].count, 1: classStats[1].count },
+                    threshold,
+                };
+
+                trainingInfo = {
+                    trainedOn: `${totalTransactions} rows`,
+                    classColumnDetected: true,
+                    classDistribution: {
+                        0: classStats[0].count,
+                        1: classStats[1].count,
+                    },
+                    meanByClass: { 0: mean0, 1: mean1 },
+                    threshold,
+                    note: classStats[0].count + classStats[1].count === 0
+                        ? 'Class мәндері танылмады, тек колонка анықталды'
+                        : null,
+                };
+            }
+
+            const initialRiskReasons = [];
+            if (hasClassColumn && classStats[1].count > 0) {
+                initialRiskReasons.push(`dataset-те class=1 (тәуекел) ${classStats[1].count} транзакция бар`);
+            }
+
+            return buildAnalysisResult({
+                totalTransactions,
+                totalAmount,
+                expenseAmount,
+                incomeAmount,
+                suspiciousKeywords: new Set(),
+                trainingInfo,
+                initialRiskReasons,
+            });
+        }
+
+        function analyzeJson(data) {
+            const transactions = Array.isArray(data)
+                ? data
+                : Array.isArray(data.transactions)
+                    ? data.transactions
+                    : null;
+
+            if (!transactions) {
+                return { noData: true };
+            }
+
+            const totalTransactions = transactions.length;
+            let totalAmount = 0;
+            let expenseAmount = 0;
+            let incomeAmount = 0;
+            const suspiciousKeywords = new Set();
+
+            const riskKeywordRegex = /салықтан|жалтар[ау]|жасыру|жасырын|офшор|қаражат|негізсіз|комиссия|қолма-қол|hidden|offshore|cash|скрыт|жалған|ферат|фальсиф|құжатсыз|кешірім|сатып|сату|аударым/i;
+            const expenseContextRegex = /шығын|аударым|төлем|қарыз|шықты|шығар(ы)л|withdrawal|cash|сатып|чек/i;
+            const incomeContextRegex = /кіріс|айлық|жалақы|табыс|депозит|income|salary|deposit|түсім/i;
+
+            for (const t of transactions) {
+                const rawValue = t.amount ?? t.sum ?? t.value;
+                const value = parseCurrency(rawValue);
+                const absValue = Number.isNaN(value) ? 0 : Math.abs(value);
+
+                totalAmount += absValue;
+
+                const desc = String(t.description ?? t.note ?? t.desc ?? '').toLowerCase();
+                const hasSign = /^[+\-−]/.test(String(rawValue ?? ''));
+
+                // Әуелі +/− белгілері арқылы анықталып, содан кейін ғана контекст қосымша тексеріледі
+                if (hasSign) {
+                    if (value < 0) {
+                        expenseAmount += absValue;
+                    } else if (value > 0) {
+                        incomeAmount += absValue;
+                    }
+                } else {
+                    if (expenseContextRegex.test(desc)) {
+                        expenseAmount += absValue;
+                    }
+                    if (incomeContextRegex.test(desc)) {
+                        incomeAmount += absValue;
+                    }
+                }
+
+                if (riskKeywordRegex.test(desc)) {
+                    suspiciousKeywords.add(desc.match(riskKeywordRegex)[0]);
+                }
+            }
+
+            return buildAnalysisResult({
+                totalTransactions,
+                totalAmount,
+                expenseAmount,
+                incomeAmount,
+                suspiciousKeywords,
+            });
+        }
+
+        // Отображение результатов
+        function displayResults(analysis) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('resultState').style.display = 'block';
+
+            const modal = document.getElementById('modalContent');
+            const resultTitle = document.getElementById('resultTitle');
+            const resultDescription = document.getElementById('resultDescription');
+            const resultStats = document.getElementById('resultStats');
+            const recommendation = document.getElementById('recommendation');
+            const recommendationText = document.getElementById('recommendationText');
+
+            if (analysis.noData) {
+                modal.classList.remove('danger');
+                resultTitle.innerHTML = '🧾 Деректерді талдау мүмкін емес';
+                resultTitle.classList.remove('neon-text-red');
+                resultDescription.textContent = 'Бұл файлда банк транзакциялары табылмады немесе формат танылмайды.';
+                resultStats.textContent = '';
+                recommendation.style.display = 'none';
+                return;
+            }
+
+            const trainingText = analysis.trainingInfo
+                ? `<div class="mt-2 text-xs text-gray-400">(Оқыту: ${analysis.trainingInfo.trainedOn}, класс0=${analysis.trainingInfo.classDistribution[0]}, класс1=${analysis.trainingInfo.classDistribution[1]}, шек=${analysis.trainingInfo.threshold.toFixed(2)})</div>`
+                : '';
+
+            const statsText = `<div class="mt-3 text-sm text-gray-300">Транзакциялар саны: ${analysis.totalTransactions}</div>${trainingText}`;
+
+            const keywordsText = (analysis.suspiciousKeywords && analysis.suspiciousKeywords.length)
+                ? `
+                    <div class="mt-3 text-xs text-gray-300">
+                        <strong>Қосымша белгілер:</strong> ${analysis.suspiciousKeywords.slice(0, 5).join(', ')}${analysis.suspiciousKeywords.length > 5 ? '...' : ''}
+                    </div>`
+                : '';
+
+            const verdictText = analysis.hasRisk
+                ? '<div class="mt-3 text-base font-semibold text-red-200">⚠️ Қауіп байқалды: кейбір транзакциялар салыққа қатысты сұрақ тудырады.</div>'
+                : '<div class="mt-3 text-base font-semibold text-green-200">✅ Салықтан жалтауға ұқсас айқын белгілер табылмады.</div>';
+
+            const reasonText = (analysis.riskReasons && analysis.riskReasons.length)
+                ? `<div class="mt-3 text-xs text-yellow-200"><strong>Неге:</strong> ${analysis.riskReasons.join(', ')}</div>`
+                : `<div class="mt-3 text-xs text-gray-300">Нақты себеп анықталмады, бірақ әрқашан құжаттарды сақтап, есепті дұрыс жүргізген дұрыс.</div>`;
+
+            const strategyText = '<div class="mt-3 text-xs text-gray-300"><strong>Жұмыс принципі:</strong> бұл құрал құжаттағы сөздер мен сомалардың үлгісіне қарап шешім жасайды.</div>';
+
+            if (analysis.hasRisk) {
+                modal.classList.add('danger');
+                resultTitle.innerHTML = '⚠️ Салықтан жалтару белгілері анықталды! Маманға кеңес алыңыз';
+                resultTitle.classList.add('neon-text-red');
+                resultDescription.textContent = 'Транзакцияларыңызда салықты белгісіз мөлшерде азайтуға бағытталған белгілер анықталды.';
+                resultStats.innerHTML = statsText + verdictText + keywordsText + reasonText + strategyText;
+
+                recommendation.style.display = 'block';
+                recommendationText.innerHTML = '<strong>Ұсыныс:</strong>' +
+                    '<div class="mt-2 text-sm text-blue-200">Бұл құрал сізге тез қарап шығуға көмектеседі, бірақ заңды және қаржылық кеңес орнына жетпейді. Егер күмәнді кейбір операциялар табылса, төмендегі қадамдар пайдалы болады.</div>' +
+                    '<ul class="text-sm text-blue-200 list-disc list-inside mt-2">' +
+                    '<li>Транзакцияларыңыздың бәрін жазып алыңыз және түбіртектеріңізді сақтаңыз.</li>' +
+                    '<li>Егер сомалар белгісіз болса, банктен толық анықтама сұраңыз.</li>' +
+                    '<li>Есеп беру кезінде нақты және адал болыңыз — бұл сіздің сабырлылығыңызды көрсетеді.</li>' +
+                    '<li>Кәсіби бухгалтер немесе салық кеңесшісімен сөйлесіп, жағдайыңызды түсіндіріңіз.</li>' +
+                    '<li>Кез келген күмән жағдайда алдын-ала әрекет жасап, дұрыс жолды таңдаңыз.</li>' +
+                    '</ul>';
+            } else {
+                modal.classList.remove('danger');
+                resultTitle.innerHTML = '✅ Салықтан жалтару белгілері табылған жоқ';
+                resultTitle.classList.remove('neon-text-red');
+                resultDescription.textContent = 'Сіздің транзакцияларыңызда салыққа қатысты маңызды сәйкессіздіктер анықталған жоқ.';
+                resultStats.innerHTML = statsText + verdictText + keywordsText + reasonText + strategyText;
+
+                recommendation.style.display = 'block';
+                recommendationText.innerHTML = '<strong>Ұсыныс:</strong>' +
+                    '<ul class="text-sm text-blue-200 list-disc list-inside mt-2">' +
+                    '<li>Транзакцияларды жүйелі түрде тексеріп тұрыңыз.</li>' +
+                    '<li>Қолжетімді есептердің бәрін сақтаңыз және сақтық көшірме жасаңыз.</li>' +
+                    '<li>Қажет болса, бухгалтермен кеңесіп, есепті дұрыстаңыз.</li>' +
+                    '<li>Егер күмәнді операциялар тапсаңыз – банктен түсініктеме сұраңыз.</li>' +
+                    '</ul>';
+            }
+        }
+
+        // Закрытие модального окна
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            document.getElementById('modalOverlay').classList.remove('active');
+            selectedFile = null;
+            document.getElementById('pdfInput').value = '';
+            clearFileStatus();
+        });
+
+        // Закрытие по клику на оверлей
+        document.getElementById('modalOverlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('modalOverlay')) {
+                document.getElementById('closeModalBtn').click();
+            }
+        });
+
+        // Инициализация
+        clearFileStatus();
+    </script>
+</body>
+</html>
